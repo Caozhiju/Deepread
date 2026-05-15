@@ -948,6 +948,10 @@
       if (btn.classList.contains('btn-permanent')) { permanentDeleteCard(idx); return }
     })
 
+    /* Fix nested-modals issue: move shareModal & detailModal to top-level body */
+    document.body.appendChild(document.getElementById('shareModal'))
+    document.body.appendChild(document.getElementById('detailModal'))
+
     document.getElementById('shareClose').onclick = () => {
       document.getElementById('shareModal').classList.remove('open')
     }
