@@ -959,6 +959,19 @@
       if (e.target === e.currentTarget) document.getElementById('shareModal').classList.remove('open')
     }
 
+    document.getElementById('detailClose').onclick = () => {
+      document.getElementById('detailModal').classList.remove('open')
+    }
+    document.getElementById('detailModal').onclick = (e) => {
+      if (e.target === e.currentTarget) document.getElementById('detailModal').classList.remove('open')
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'))
+      }
+    })
+
     document.getElementById('shareAsImage').onclick = async () => {
       const node = document.getElementById('shareCardPreview')
       if (!node || !window.html2canvas) { alert('图片生成库尚未加载，请稍后重试'); return }
