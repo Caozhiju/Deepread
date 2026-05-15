@@ -393,18 +393,21 @@
 
     btnSimulate.onclick = () => receiveText(FAKE_TEXT)
 
-    document.getElementById('btnPaste').onclick = async () => {
+    document.getElementById('btnPaste').addEventListener('click', async () => {
       try {
         const text = await navigator.clipboard.readText()
-        if (!text.trim()) {
-          alert('剪贴板为空，请先复制文本')
+        if (!text || text.trim() === '') {
+          alert('剪贴板是空的哦')
           return
         }
-        receiveText(text.trim())
+        const input = document.getElementById('receiveArea')
+        input.value = text.trim()
+        await loadAIQuestions(text.trim())
       } catch (err) {
-        alert('无法读取剪贴板：' + err.message + '。请确保已授予剪贴板权限，或改用"模拟接收"按钮。')
+        console.error('读取剪贴板失败: ', err)
+        alert('浏览器没有剪贴板读取权限，请直接在输入框中长按手动粘贴，然后点击旁边的[模拟接收]按钮。')
       }
-    }
+    })
 
     window.addEventListener('load', () => {
       const params = new URLSearchParams(window.location.search)
