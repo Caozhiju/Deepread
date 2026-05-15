@@ -730,24 +730,48 @@
     }
 
     function renderLibrary() {
-      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      const allNotes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
       const body = document.getElementById('modalBody')
-      if (!notes.length) {
+      if (!allNotes.length) {
         body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">卡片库空空如也</p>'
         return
       }
-      body.innerHTML = notes.map((n, i) => {
-        const idx = notes.length - 1 - i
+      body.innerHTML = allNotes.slice().reverse().map((n, displayIdx) => {
         const excerpt = (n.text || '').length > 30 ? n.text.slice(0, 30) + '…' : (n.text || '')
         return '<div class="library-card">' +
           '<span class="badge">' + (n.date || '') + '</span>' +
           '<div class="preview">' + excerpt + '</div>' +
           '<div class="card-actions">' +
-          '<button class="btn btn-sm" data-action="view" data-idx="' + idx + '">🔍 查看详情</button>' +
-          '<button class="btn btn-sm" data-action="share" data-idx="' + idx + '">📤 分享</button>' +
-          '<button class="btn btn-sm" data-action="delete" data-idx="' + idx + '" style="background:#fee2e2;color:#991b1b;">🗑️ 删除</button>' +
+          '<button class="btn btn-sm" data-action="view" data-index="' + displayIdx + '">🔍 查看详情</button>' +
+          '<button class="btn btn-sm" data-action="share" data-index="' + displayIdx + '">📤 分享</button>' +
+          '<button class="btn btn-sm" data-action="delete" data-index="' + displayIdx + '" style="background:#fee2e2;color:#991b1b;">🗑️ 删除</button>' +
           '</div></div>'
       }).join('')
+    }
+
+    function showCard(idx) {
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      const realIdx = notes.length - 1 - idx
+      return notes[realIdx]
+    }
+
+    function deleteCard(idx) {
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      const realIdx = notes.length - 1 - idx
+      notes.splice(realIdx, 1)
+      localStorage.setItem('reading_notes', JSON.stringify(notes))
+      renderLibrary()
+    }
+
+    function shareCard(idx) {
+      const note = showCard(idx)
+      if (!note) return
+      const text = '📖 阅读笔记\n\n📅 ' + (note.date || '') + '\n\n📖 原文：' + (note.text || '') + '\n\n✏️ 我的思考：' + (note.thought || '') + (note.summary ? '\n\n📄 AI 总结：' + note.summary : '')
+      if (navigator.share) {
+        navigator.share({ title: '阅读笔记', text }).catch(() => {})
+      } else {
+        navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板')).catch(() => alert('分享失败'))
+      }
     }
 
     document.getElementById('btnLibrary').onclick = () => {
@@ -766,31 +790,22 @@
     document.getElementById('modalBody').onclick = (e) => {
       const btn = e.target.closest('[data-action]')
       if (!btn) return
-      const idx = parseInt(btn.dataset.idx)
-      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
-      const note = notes[idx]
+      const idx = parseInt(btn.dataset.index)
+      const note = showCard(idx)
       if (!note) return
 
-      const action = btn.dataset.action
-      if (action === 'view') {
+      if (btn.dataset.action === 'view') {
         document.getElementById('detailBody').innerHTML =
           '<div class="detail-section"><div class="label">📅 日期</div><div class="value">' + (note.date || '') + '</div></div>' +
           '<div class="detail-section"><div class="label">📖 原文</div><div class="value">' + (note.text || '') + '</div></div>' +
           '<div class="detail-section"><div class="label">✏️ 我的思考</div><div class="value">' + (note.thought || '') + '</div></div>' +
           (note.summary ? '<div class="detail-section"><div class="label">📄 AI 研讨总结</div><div class="value">' + note.summary + '</div></div>' : '')
         document.getElementById('detailModal').classList.add('open')
-      } else if (action === 'share') {
-        const shareText = '📖 阅读笔记\n\n📅 ' + (note.date || '') + '\n\n📖 原文：' + (note.text || '') + '\n\n✏️ 我的思考：' + (note.thought || '') + (note.summary ? '\n\n📄 AI 总结：' + note.summary : '')
-        if (navigator.share) {
-          navigator.share({ title: '阅读笔记', text: shareText }).catch(() => {})
-        } else {
-          navigator.clipboard.writeText(shareText).then(() => alert('已复制到剪贴板')).catch(() => alert('分享失败'))
-        }
-      } else if (action === 'delete') {
+      } else if (btn.dataset.action === 'share') {
+        shareCard(idx)
+      } else if (btn.dataset.action === 'delete') {
         if (!confirm('确定删除这条笔记吗？')) return
-        notes.splice(idx, 1)
-        localStorage.setItem('reading_notes', JSON.stringify(notes))
-        renderLibrary()
+        deleteCard(idx)
       }
     }
 
