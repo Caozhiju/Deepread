@@ -175,16 +175,70 @@
     }
     .btn-evaluate:hover { background: #fdf0d5; }
     .btn-evaluate:active { transform: scale(0.98); }
-    .evaluation-result {
+    .chat-window {
       display: none;
       margin-top: 14px;
+      border: 1px solid #e4e7ec;
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .chat-messages {
+      padding: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .chat-msg {
+      padding: 10px 14px;
+      border-radius: 12px;
+      max-width: 85%;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .chat-msg.assistant {
+      background: #f5f0ff;
+      color: #1a1a2e;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .chat-msg.user {
+      background: #7c5cfc;
+      color: #fff;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .chat-input-area {
+      display: none;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid #e4e7ec;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .chat-input {
+      flex: 1;
+      min-width: 140px;
+      padding: 10px 14px;
+      border: 1.5px solid #e4e7ec;
+      border-radius: 10px;
+      font-size: 14px;
+      outline: none;
+    }
+    .chat-input:focus { border-color: #7c5cfc; }
+    .chat-summary {
+      display: none;
+      margin-top: 12px;
       padding: 16px 18px;
-      background: #faf8f5;
-      border-left: 4px solid #e6a23c;
+      background: #f0fdf4;
+      border-left: 4px solid #22c55e;
       border-radius: 10px;
       font-size: 14px;
       line-height: 1.7;
-      color: #3d382e;
+      color: #166534;
       white-space: pre-wrap;
     }
     .modal-overlay {
@@ -261,7 +315,15 @@
       <div class="card-title">✏️ 我的思考区</div>
       <textarea id="thoughtArea" placeholder="顺着上面的思路，或者自由记录..."></textarea>
       <button class="btn btn-evaluate" id="btnEvaluate">✍️ 请 AI 点评我的思考</button>
-      <div class="evaluation-result" id="evaluationResult"></div>
+      <div class="chat-window" id="chatWindow">
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-area" id="chatInputArea">
+          <input type="text" class="chat-input" id="chatReplyInput" placeholder="输入你的追问或反驳...">
+          <button class="btn btn-sm" id="chatSendBtn">发送</button>
+          <button class="btn btn-sm" id="chatEndBtn" style="background:#fee2e2;color:#991b1b;">🛑 结束探讨并总结</button>
+        </div>
+      </div>
+      <div class="chat-summary" id="chatSummary"></div>
     </div>
 
     <div class="bottom">
@@ -333,31 +395,6 @@
       const match = responseText.match(/\[[\s\S]*\]/)
       if (!match) throw new Error('无法解析 AI 返回的格式')
       return JSON.parse(match[0])
-    }
-
-    async function evaluateThought(originalText, userThought, whitelist) {
-      const systemPrompt = '你是一位拥有极高文学素养的资深文学评论家。现在，读者提供了一段小说原文，以及他针对这段原文写下的个人思考。你需要对读者的思考进行专业的【点评与升华】。\n\n开始前请先做简单判断：如果读者提供的内容少于3个字，或者纯粹是无规律乱码（如连续无意义字母或数字），请温和地提示他认真输入。否则，请针对他的内容，结合小说原文进行深度文学点评。注意：严格遵守专有名词白名单。\n\n对于正常内容，请按以下结构输出回答：\n\n闪光点：肯定读者思考中敏锐、独特的切入点。\n\n升华建议：以引导性的语言，提出一个可以进一步深挖的文学维度（如：动机的潜台词、叙事视角的张力、特定词汇/构式的隐喻等）。\n语气要像一位亦师亦友的资深书友，真诚且富有洞察力。\n【强制安全约束】：你的点评必须严格基于传入的【专有名词白名单】，绝不允许在点评中虚构、捏造白名单之外的人名、地名或设定。'
-      const userPrompt = '小说原文：' + originalText + '\n\n读者的思考：' + userThought + '\n\n专有名词白名单：' + (whitelist.length ? whitelist.join('、') : '无')
-
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
-        body: JSON.stringify({
-          model: MODEL_NAME,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.7,
-        }),
-      })
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${await res.text()}`)
-      }
-
-      const data = await res.json()
-      return data.choices[0].message.content
     }
 
     async function loadAIQuestions(text) {
@@ -482,6 +519,27 @@
       loadAIQuestions(text)
     }
 
+    let currentChatHistory = []
+
+    async function callChatAPI(messages) {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+        body: JSON.stringify({ model: MODEL_NAME, messages, temperature: 0.7 }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`)
+      const data = await res.json()
+      return data.choices[0].message.content
+    }
+
+    function renderMessage(content, role, container) {
+      const div = document.createElement('div')
+      div.className = 'chat-msg ' + role
+      div.textContent = content
+      container.appendChild(div)
+      container.scrollTop = container.scrollHeight
+    }
+
     document.getElementById('btnEvaluate').onclick = async () => {
       const originalText = document.getElementById('receiveArea').value.trim()
       const userThought = document.getElementById('thoughtArea').value.trim()
@@ -489,22 +547,99 @@
       if (!originalText) { alert('请先接收原文'); return }
 
       const btn = document.getElementById('btnEvaluate')
-      const resultDiv = document.getElementById('evaluationResult')
-      btn.textContent = '老编辑审稿中...'
+      const chatWindow = document.getElementById('chatWindow')
+      const chatMessages = document.getElementById('chatMessages')
+      const chatInputArea = document.getElementById('chatInputArea')
+      const summaryDiv = document.getElementById('chatSummary')
+
+      chatMessages.innerHTML = ''
+      summaryDiv.style.display = 'none'
+      summaryDiv.innerHTML = ''
+      chatWindow.style.display = 'block'
+      chatInputArea.style.display = 'none'
       btn.disabled = true
+      btn.textContent = '老编辑审稿中...'
 
       const whitelist = getWhitelist()
+      const s = '【强制安全约束】必须严格遵守专有名词白名单，禁止虚构名单之外的人名、地名或设定。'
+      const systemPrompt = '你是一位拥有极高文学素养的资深文学评论家。现在，读者提供了一段小说原文和他写下的个人思考。你需要对读者的思考进行专业的【点评与升华】。\n\n开始前先做简单判断：如果读者提供的内容少于3个字或是无规律乱码，请温和提示他认真输入。否则，结合原文进行深度文学点评。\n\n请按以下结构输出：\n\n闪光点：肯定读者思考中敏锐、独特的切入点。\n\n升华建议：以引导性的语言，提出可以进一步深挖的文学维度（如动机潜台词、叙事视角张力、特定词汇隐喻等）。\n语气要像一位亦师亦友的资深书友。\n' + s
+      const userPrompt = '小说原文：' + originalText + '\n\n读者的思考：' + userThought + '\n\n专有名词白名单：' + (whitelist.length ? whitelist.join('、') : '无')
+
+      currentChatHistory = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ]
 
       try {
-        const evaluation = await evaluateThought(originalText, userThought, whitelist)
-        resultDiv.textContent = evaluation
-        resultDiv.style.display = 'block'
+        const reply = await callChatAPI(currentChatHistory)
+        currentChatHistory.push({ role: 'assistant', content: reply })
+        renderMessage(reply, 'assistant', chatMessages)
+        document.getElementById('chatReplyInput').value = ''
+        chatInputArea.style.display = 'flex'
       } catch (err) {
         alert('AI 点评失败：' + err.message)
       } finally {
         btn.textContent = '✍️ 请 AI 点评我的思考'
         btn.disabled = false
       }
+    }
+
+    document.getElementById('chatSendBtn').onclick = async () => {
+      const input = document.getElementById('chatReplyInput')
+      const text = input.value.trim()
+      if (!text) return
+      input.value = ''
+
+      const chatMessages = document.getElementById('chatMessages')
+      const chatInputArea = document.getElementById('chatInputArea')
+
+      currentChatHistory.push({ role: 'user', content: text })
+      renderMessage(text, 'user', chatMessages)
+      chatInputArea.style.display = 'none'
+
+      try {
+        const reply = await callChatAPI(currentChatHistory)
+        currentChatHistory.push({ role: 'assistant', content: reply })
+        renderMessage(reply, 'assistant', chatMessages)
+      } catch (err) {
+        alert('回复失败：' + err.message)
+      } finally {
+        chatInputArea.style.display = 'flex'
+      }
+    }
+
+    document.getElementById('chatEndBtn').onclick = async () => {
+      const chatMessages = document.getElementById('chatMessages')
+      const chatInputArea = document.getElementById('chatInputArea')
+      const summaryDiv = document.getElementById('chatSummary')
+
+      chatInputArea.style.display = 'none'
+      const loading = document.createElement('div')
+      loading.style.cssText = 'text-align:center;padding:12px;color:#98a2b3;font-size:13px;'
+      loading.textContent = '⏳ 正在生成学术总结...'
+      chatMessages.appendChild(loading)
+
+      currentChatHistory.push({
+        role: 'system',
+        content: '请根据以上所有的探讨内容，用学术、严谨的语言，提取核心观点与升华洞察，输出为一段结构清晰的 Markdown 总结报告。',
+      })
+
+      try {
+        const summary = await callChatAPI(currentChatHistory)
+        chatMessages.removeChild(loading)
+        summaryDiv.innerHTML = summary
+        summaryDiv.style.display = 'block'
+        const ta = document.getElementById('thoughtArea')
+        ta.value = ta.value.trim() + '\n\n---\n### 📄 学术总结报告\n\n' + summary
+        ta.focus()
+      } catch (err) {
+        chatMessages.removeChild(loading)
+        alert('总结失败：' + err.message)
+      }
+    }
+
+    document.getElementById('chatReplyInput').onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('chatSendBtn').click() }
     }
 
     document.getElementById('btnLibrary').onclick = () => {
