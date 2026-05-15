@@ -194,6 +194,50 @@
       color: #3d382e;
       white-space: pre-wrap;
     }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 1000;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px 16px;
+      overflow-y: auto;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-content {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px 20px;
+      max-width: 560px;
+      width: 100%;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .modal-header h2 { font-size: 18px; color: #1a1a2e; }
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      color: #98a2b3;
+      padding: 0 4px;
+    }
+    .modal-close:hover { color: #344054; }
+    .modal-item {
+      padding: 12px 0;
+      border-bottom: 1px solid #f0f0f5;
+    }
+    .modal-item:last-child { border-bottom: none; }
+    .modal-item .meta { font-size: 12px; color: #98a2b3; margin-bottom: 4px; }
+    .modal-item .excerpt { font-size: 13px; color: #7c5cfc; margin-bottom: 4px; }
+    .modal-item .thought { font-size: 14px; color: #344054; }
   </style>
 </head>
 <body>
@@ -229,7 +273,18 @@
 
     <div class="bottom">
       <button class="btn btn-primary" id="btnSave">💾 保存至卡片库</button>
-      <button class="btn btn-outline" id="btnExport">📥 导出全书笔记</button>
+      <button class="btn btn-outline" id="btnExport">📥 导出笔记</button>
+      <button class="btn btn-outline" id="btnLibrary">📖 卡片库</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="libraryModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📖 我的卡片库</h2>
+        <button class="modal-close" id="modalClose">&times;</button>
+      </div>
+      <div id="modalBody"></div>
     </div>
   </div>
 
@@ -286,7 +341,7 @@
     }
 
     async function evaluateThought(originalText, userThought, whitelist) {
-      const systemPrompt = '你是一位拥有极高文学素养的资深文学评论家。现在，读者提供了一段小说原文，以及他针对这段原文写下的个人思考。你需要对读者的思考进行专业的【点评与升华】。\n\n【强制前置检验】：在开始点评前，你必须先判断读者的思考内容是否为无意义的乱码（如连续无规律字母 jhhii、数字等）、完全无关的标点符号，或者字数少于3个字的敷衍。如果是，请直接且仅返回这句话："你的思考区似乎输入了无意义的内容，请认真写下你真实的阅读感悟后再让我点评。" 绝对不要进行任何脑补和后续点评。只有在内容有意义时，才按照以下格式输出点评。\n\n请按以下结构输出回答：\n\n闪光点：肯定读者思考中敏锐、独特的切入点。\n\n升华建议：以引导性的语言，提出一个可以进一步深挖的文学维度（如：动机的潜台词、叙事视角的张力、特定词汇/构式的隐喻等）。\n语气要像一位亦师亦友的资深书友，真诚且富有洞察力。\n【强制安全约束】：你的点评必须严格基于传入的【专有名词白名单】，绝不允许在点评中虚构、捏造白名单之外的人名、地名或设定。'
+      const systemPrompt = '你是一位拥有极高文学素养的资深文学评论家。现在，读者提供了一段小说原文，以及他针对这段原文写下的个人思考。你需要对读者的思考进行专业的【点评与升华】。\n\n开始前请先做简单判断：如果读者提供的内容少于3个字，或者纯粹是无规律乱码（如连续无意义字母或数字），请温和地提示他认真输入。否则，请针对他的内容，结合小说原文进行深度文学点评。注意：严格遵守专有名词白名单。\n\n对于正常内容，请按以下结构输出回答：\n\n闪光点：肯定读者思考中敏锐、独特的切入点。\n\n升华建议：以引导性的语言，提出一个可以进一步深挖的文学维度（如：动机的潜台词、叙事视角的张力、特定词汇/构式的隐喻等）。\n语气要像一位亦师亦友的资深书友，真诚且富有洞察力。\n【强制安全约束】：你的点评必须严格基于传入的【专有名词白名单】，绝不允许在点评中虚构、捏造白名单之外的人名、地名或设定。'
       const userPrompt = JSON.stringify({ originalText, userThought, whitelist })
 
       const res = await fetch(API_URL, {
@@ -324,7 +379,7 @@
         aiSection.style.display = 'block'
         btnRefresh.style.display = ''
       } catch (err) {
-        alert('AI 请求失败：' + err.message)
+        alert('生成问题失败: ' + err.message)
       } finally {
         btnRefresh.textContent = '🔄 刷新换一批'
         btnRefresh.disabled = false
@@ -428,9 +483,9 @@
     }
 
     document.getElementById('btnEvaluate').onclick = async () => {
-      const originalText = receiveArea.value.trim()
-      const userThought = thoughtArea.value.trim()
-      if (!userThought) { alert('请先写下你的思考'); return }
+      const originalText = document.getElementById('receiveArea').value.trim()
+      const userThought = document.getElementById('thoughtArea').value.trim()
+      if (!userThought) { alert('请先输入思考内容'); return }
       if (!originalText) { alert('请先接收原文'); return }
 
       const btn = document.getElementById('btnEvaluate')
@@ -450,6 +505,33 @@
       } finally {
         btn.textContent = '✍️ 请 AI 点评我的思考'
         btn.disabled = false
+      }
+    }
+
+    document.getElementById('btnLibrary').onclick = () => {
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      const body = document.getElementById('modalBody')
+      if (!notes.length) {
+        body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">卡片库空空如也</p>'
+      } else {
+        body.innerHTML = notes.slice().reverse().map(n =>
+          `<div class="modal-item">
+            <div class="meta">${n.date}</div>
+            <div class="excerpt">原文：${n.text.length > 20 ? n.text.slice(0, 20) + '...' : n.text}</div>
+            <div class="thought">💭 ${n.thought}</div>
+          </div>`
+        ).join('')
+      }
+      document.getElementById('libraryModal').classList.add('open')
+    }
+
+    document.getElementById('modalClose').onclick = () => {
+      document.getElementById('libraryModal').classList.remove('open')
+    }
+
+    document.getElementById('libraryModal').onclick = (e) => {
+      if (e.target === e.currentTarget) {
+        e.currentTarget.classList.remove('open')
       }
     }
   </script>
