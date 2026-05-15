@@ -285,6 +285,70 @@
     .modal-item .meta { font-size: 12px; color: #98a2b3; margin-bottom: 4px; }
     .modal-item .excerpt { font-size: 13px; color: #7c5cfc; margin-bottom: 4px; }
     .modal-item .thought { font-size: 14px; color: #344054; }
+    .final-summary-area {
+      display: none;
+      margin-top: 12px;
+      padding: 16px 18px;
+      background: #eef2ff;
+      border-left: 4px solid #6366f1;
+      border-radius: 10px;
+    }
+    .final-summary-area .label { font-size: 13px; font-weight: 600; color: #4338ca; margin-bottom: 8px; }
+    .final-summary-area .body { font-size: 14px; line-height: 1.7; color: #1e1b4b; white-space: pre-wrap; }
+    .final-summary-area .btn { margin-top: 10px; }
+    .card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .library-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border: 1px solid #f0f0f5;
+    }
+    .library-card .badge {
+      font-size: 11px;
+      color: #7c5cfc;
+      background: #f0ecff;
+      padding: 2px 8px;
+      border-radius: 999px;
+      align-self: flex-start;
+    }
+    .library-card .preview {
+      font-size: 13px;
+      color: #344054;
+      line-height: 1.5;
+    }
+    .library-card .card-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .library-card .card-actions .btn {
+      flex: 1;
+      padding: 6px 0;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+    .detail-section { margin-bottom: 16px; }
+    .detail-section .label { font-size: 13px; font-weight: 600; color: #344054; margin-bottom: 6px; }
+    .detail-section .value {
+      font-size: 14px;
+      line-height: 1.7;
+      color: #1d2939;
+      background: #f9fafb;
+      padding: 12px 14px;
+      border-radius: 10px;
+      white-space: pre-wrap;
+    }
+    @media (max-width: 440px) {
+      .card-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -321,9 +385,22 @@
           <input type="text" class="chat-input" id="chatReplyInput" placeholder="输入你的追问或反驳...">
           <button class="btn btn-sm" id="chatSendBtn">发送</button>
           <button class="btn btn-sm" id="chatEndBtn" style="background:#fee2e2;color:#991b1b;">🛑 结束探讨并总结</button>
-        </div>
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📄 卡片详情</h2>
+        <button class="modal-close" id="detailClose">&times;</button>
+      </div>
+      <div id="detailBody"></div>
+    </div>
+  </div>
       </div>
       <div class="chat-summary" id="chatSummary"></div>
+      <div class="final-summary-area" id="finalSummaryArea">
+        <div class="label">📄 学术总结报告</div>
+        <div class="body" id="summaryBody"></div>
+        <button class="btn btn-sm" id="btnSaveSummary">📋 复制总结并存入卡片</button>
+      </div>
     </div>
 
     <div class="bottom">
@@ -611,7 +688,6 @@
     document.getElementById('chatEndBtn').onclick = async () => {
       const chatMessages = document.getElementById('chatMessages')
       const chatInputArea = document.getElementById('chatInputArea')
-      const summaryDiv = document.getElementById('chatSummary')
 
       chatInputArea.style.display = 'none'
       const loading = document.createElement('div')
@@ -627,11 +703,11 @@
       try {
         const summary = await callChatAPI(currentChatHistory)
         chatMessages.removeChild(loading)
-        summaryDiv.innerHTML = summary
-        summaryDiv.style.display = 'block'
-        const ta = document.getElementById('thoughtArea')
-        ta.value = ta.value.trim() + '\n\n---\n### 📄 学术总结报告\n\n' + summary
-        ta.focus()
+        document.getElementById('summaryBody').textContent = summary
+        document.getElementById('finalSummaryArea').style.display = 'block'
+        window._lastSummary = summary
+        window._lastOriginalText = document.getElementById('receiveArea').value.trim()
+        window._lastThought = document.getElementById('thoughtArea').value.trim()
       } catch (err) {
         chatMessages.removeChild(loading)
         alert('总结失败：' + err.message)
@@ -642,31 +718,88 @@
       if (e.key === 'Enter') { e.preventDefault(); document.getElementById('chatSendBtn').click() }
     }
 
-    document.getElementById('btnLibrary').onclick = () => {
+    document.getElementById('btnSaveSummary').onclick = () => {
+      const text = window._lastOriginalText || document.getElementById('receiveArea').value.trim()
+      const thought = window._lastThought || document.getElementById('thoughtArea').value.trim()
+      const summary = window._lastSummary || ''
+      if (!text || !thought) { alert('缺少原文或思考内容'); return }
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      notes.push({ date: new Date().toLocaleString(), text, thought, summary })
+      localStorage.setItem('reading_notes', JSON.stringify(notes))
+      alert('✅ 卡片已保存（含学术总结）')
+    }
+
+    function renderLibrary() {
       const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
       const body = document.getElementById('modalBody')
       if (!notes.length) {
         body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">卡片库空空如也</p>'
-      } else {
-        body.innerHTML = notes.slice().reverse().map(n =>
-          `<div class="modal-item">
-            <div class="meta">${n.date}</div>
-            <div class="excerpt">原文：${n.text.length > 20 ? n.text.slice(0, 20) + '...' : n.text}</div>
-            <div class="thought">💭 ${n.thought}</div>
-          </div>`
-        ).join('')
+        return
       }
+      body.innerHTML = notes.map((n, i) => {
+        const idx = notes.length - 1 - i
+        const excerpt = (n.text || '').length > 30 ? n.text.slice(0, 30) + '…' : (n.text || '')
+        return '<div class="library-card">' +
+          '<span class="badge">' + (n.date || '') + '</span>' +
+          '<div class="preview">' + excerpt + '</div>' +
+          '<div class="card-actions">' +
+          '<button class="btn btn-sm" data-action="view" data-idx="' + idx + '">🔍 查看详情</button>' +
+          '<button class="btn btn-sm" data-action="share" data-idx="' + idx + '">📤 分享</button>' +
+          '<button class="btn btn-sm" data-action="delete" data-idx="' + idx + '" style="background:#fee2e2;color:#991b1b;">🗑️ 删除</button>' +
+          '</div></div>'
+      }).join('')
+    }
+
+    document.getElementById('btnLibrary').onclick = () => {
+      renderLibrary()
       document.getElementById('libraryModal').classList.add('open')
+    }
+
+    document.getElementById('libraryModal').onclick = (e) => {
+      if (e.target === e.currentTarget) document.getElementById('libraryModal').classList.remove('open')
     }
 
     document.getElementById('modalClose').onclick = () => {
       document.getElementById('libraryModal').classList.remove('open')
     }
 
-    document.getElementById('libraryModal').onclick = (e) => {
-      if (e.target === e.currentTarget) {
-        e.currentTarget.classList.remove('open')
+    document.getElementById('modalBody').onclick = (e) => {
+      const btn = e.target.closest('[data-action]')
+      if (!btn) return
+      const idx = parseInt(btn.dataset.idx)
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      const note = notes[idx]
+      if (!note) return
+
+      const action = btn.dataset.action
+      if (action === 'view') {
+        document.getElementById('detailBody').innerHTML =
+          '<div class="detail-section"><div class="label">📅 日期</div><div class="value">' + (note.date || '') + '</div></div>' +
+          '<div class="detail-section"><div class="label">📖 原文</div><div class="value">' + (note.text || '') + '</div></div>' +
+          '<div class="detail-section"><div class="label">✏️ 我的思考</div><div class="value">' + (note.thought || '') + '</div></div>' +
+          (note.summary ? '<div class="detail-section"><div class="label">📄 AI 研讨总结</div><div class="value">' + note.summary + '</div></div>' : '')
+        document.getElementById('detailModal').classList.add('open')
+      } else if (action === 'share') {
+        const shareText = '📖 阅读笔记\n\n📅 ' + (note.date || '') + '\n\n📖 原文：' + (note.text || '') + '\n\n✏️ 我的思考：' + (note.thought || '') + (note.summary ? '\n\n📄 AI 总结：' + note.summary : '')
+        if (navigator.share) {
+          navigator.share({ title: '阅读笔记', text: shareText }).catch(() => {})
+        } else {
+          navigator.clipboard.writeText(shareText).then(() => alert('已复制到剪贴板')).catch(() => alert('分享失败'))
+        }
+      } else if (action === 'delete') {
+        if (!confirm('确定删除这条笔记吗？')) return
+        notes.splice(idx, 1)
+        localStorage.setItem('reading_notes', JSON.stringify(notes))
+        renderLibrary()
       }
+    }
+
+    document.getElementById('detailClose').onclick = () => {
+      document.getElementById('detailModal').classList.remove('open')
+    }
+
+    document.getElementById('detailModal').onclick = (e) => {
+      if (e.target === e.currentTarget) document.getElementById('detailModal').classList.remove('open')
     }
   </script>
 </body>
