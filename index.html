@@ -167,6 +167,33 @@
     }
     .btn-paste:hover { background: #c8e6c9; }
     .btn-paste:active { transform: scale(0.98); }
+    .btn-evaluate {
+      width: 100%;
+      padding: 12px 0;
+      margin-top: 12px;
+      background: #fff4e5;
+      color: #b76e00;
+      border: 1.5px solid #e6a23c;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-evaluate:hover { background: #fdf0d5; }
+    .btn-evaluate:active { transform: scale(0.98); }
+    .evaluation-result {
+      display: none;
+      margin-top: 14px;
+      padding: 16px 18px;
+      background: #faf8f5;
+      border-left: 4px solid #e6a23c;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #3d382e;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 <body>
@@ -196,6 +223,8 @@
     <div class="card thinking-area">
       <div class="card-title">✏️ 我的思考区</div>
       <textarea id="thoughtArea" placeholder="顺着上面的思路，或者自由记录..."></textarea>
+      <button class="btn btn-evaluate" id="btnEvaluate">✍️ 请 AI 点评我的思考</button>
+      <div class="evaluation-result" id="evaluationResult"></div>
     </div>
 
     <div class="bottom">
@@ -254,6 +283,31 @@
       const match = content.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/)
       if (match) content = match[1]
       return JSON.parse(content)
+    }
+
+    async function evaluateThought(originalText, userThought, whitelist) {
+      const systemPrompt = '你是一位拥有极高文学素养的资深文学评论家。现在，读者提供了一段小说原文，以及他针对这段原文写下的个人思考。你需要对读者的思考进行专业的【点评与升华】。请按以下结构输出回答：\n\n闪光点：肯定读者思考中敏锐、独特的切入点。\n\n升华建议：以引导性的语言，提出一个可以进一步深挖的文学维度（如：动机的潜台词、叙事视角的张力、特定词汇/构式的隐喻等）。\n语气要像一位亦师亦友的资深书友，真诚且富有洞察力。\n【强制安全约束】：你的点评必须严格基于传入的【专有名词白名单】，绝不允许在点评中虚构、捏造白名单之外的人名、地名或设定。'
+      const userPrompt = JSON.stringify({ originalText, userThought, whitelist })
+
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+        body: JSON.stringify({
+          model: MODEL_NAME,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.7,
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${await res.text()}`)
+      }
+
+      const data = await res.json()
+      return data.choices[0].message.content
     }
 
     async function loadAIQuestions(text) {
@@ -318,23 +372,22 @@
       thoughtArea.focus()
     })
 
-    async function exportBookNotes(bookId) {
-      const book = await db.books.get(bookId)
-      if (!book) { alert('未找到书籍信息'); return }
-
-      const cards = await db.getCardsByBookId(bookId)
-      if (!cards.length) { alert('该书暂无思考卡片'); return }
-      cards.sort((a, b) => a.createdAt - b.createdAt)
+    async function exportAllNotes() {
+      const cards = await db.thoughtCards.toArray()
+      if (!cards.length) { alert('当前没有可导出的笔记'); return }
+      cards.sort((a, b) => b.createdAt - a.createdAt)
 
       const lines = []
-      lines.push(`# 《${book.title}》阅读思考笔记`)
+      lines.push('# 我的全部阅读思考笔记')
       lines.push('')
 
       for (const card of cards) {
         const d = new Date(card.createdAt)
         const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+        const book = await db.books.get(card.bookId)
+        const title = book ? `《${book.title}》` : '（未关联书籍）'
         lines.push('---')
-        lines.push(`### ${ds}`)
+        lines.push(`### ${ds} ${title}`)
         lines.push(`> **原文高亮**：${card.highlightText}`)
         lines.push('')
         lines.push(`**我的思考**：${card.userAnswer}`)
@@ -351,7 +404,7 @@
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${book.title}_阅读笔记_${ts.split(' ')[0]}.md`
+      a.download = `我的全部阅读笔记_${ts.split(' ')[0]}.md`
       a.style.display = 'none'
       document.body.appendChild(a)
       a.click()
@@ -397,19 +450,39 @@
     }
 
     document.getElementById('btnExport').onclick = async () => {
-      const book = await db.books.limit(1).first()
-      if (!book) {
-        alert('数据库中暂无书籍，请先在控制台添加一本')
-        return
-      }
-      if (!confirm(`确认导出《${book.title}》的全部思考笔记吗？`)) return
-      await exportBookNotes(book.id)
+      await exportAllNotes()
     }
 
     btnRefresh.onclick = () => {
       const text = receiveArea.value.trim()
       if (!text) { alert('请先通过粘贴或模拟接收填入原文'); return }
       loadAIQuestions(text)
+    }
+
+    document.getElementById('btnEvaluate').onclick = async () => {
+      const originalText = receiveArea.value.trim()
+      const userThought = thoughtArea.value.trim()
+      if (!userThought) { alert('请先写下你的思考'); return }
+      if (!originalText) { alert('请先接收原文'); return }
+
+      const btn = document.getElementById('btnEvaluate')
+      const resultDiv = document.getElementById('evaluationResult')
+      btn.textContent = '老编辑审稿中...'
+      btn.disabled = true
+
+      const book = await db.books.limit(1).first()
+      const whitelist = book?.entityWhitelist || []
+
+      try {
+        const evaluation = await evaluateThought(originalText, userThought, whitelist)
+        resultDiv.textContent = evaluation
+        resultDiv.style.display = 'block'
+      } catch (err) {
+        alert('AI 点评失败：' + err.message)
+      } finally {
+        btn.textContent = '✍️ 请 AI 点评我的思考'
+        btn.disabled = false
+      }
     }
   </script>
 </body>
