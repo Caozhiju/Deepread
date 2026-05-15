@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/proxy", "destination": "https://api.chatanywhere.tech/v1/chat/completions" }
+  ]
+}
