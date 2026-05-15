@@ -10,171 +10,14 @@
   {
     "imports": {
       "dexie": "https://cdn.jsdelivr.net/npm/dexie@4.0.10/dist/dexie.mjs"
+      }
     }
-  }
-  </script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(180deg, #f4f0ff 0%, #f0f4ff 100%);
-      min-height: 100vh;
-      padding: 20px 16px 32px;
-      display: flex;
-      justify-content: center;
-    }
-    .app {
-      max-width: 600px;
-      width: 100%;
-    }
-    .header {
-      text-align: center;
-      padding: 16px 0 24px;
-    }
-    .header h1 {
-      font-size: 22px;
-      font-weight: 700;
-      color: #1a1a2e;
-      letter-spacing: 0.5px;
-    }
-    .header .sub {
-      font-size: 13px;
-      color: #98a2b3;
-      margin-top: 2px;
-    }
-    .card {
-      background: #fff;
-      border-radius: 16px;
-      padding: 20px;
-      margin-bottom: 16px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-    }
-    .card-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: #344054;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    textarea {
-      width: 100%;
-      padding: 14px 16px;
-      border: 1.5px solid #e4e7ec;
-      border-radius: 12px;
-      font-size: 15px;
-      line-height: 1.6;
-      color: #1d2939;
-      background: #fafbfc;
-      resize: none;
-      transition: border-color 0.2s, background 0.2s;
-    }
-    textarea:focus {
-      outline: none;
-      border-color: #7c5cfc;
-      background: #fff;
-      box-shadow: 0 0 0 3px rgba(124,92,252,0.1);
-    }
-    textarea:read-only {
-      background: #f8f9fc;
-    }
-    textarea::placeholder { color: #98a2b3; }
-    .row {
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
-    }
-    .row textarea { flex: 1; }
-    .btn {
-      border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      white-space: nowrap;
-    }
-    .btn-sm {
-      padding: 10px 16px;
-      background: #f0ecff;
-      color: #7c5cfc;
-    }
-    .btn-sm:hover { background: #e4ddff; }
-    .btn-sm:active { transform: scale(0.96); }
-    .btn-primary {
-      width: 100%;
-      padding: 14px 0;
-      background: #7c5cfc;
-      color: #fff;
-      font-size: 16px;
-      border-radius: 12px;
-      box-shadow: 0 4px 14px rgba(124,92,252,0.25);
-    }
-    .btn-primary:hover { background: #6948f0; transform: translateY(-1px); }
-    .btn-primary:active { transform: scale(0.98); }
-    .ai-section { display: none; }
-    .capsule-bar {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .capsule {
-      padding: 8px 16px;
-      border: 1.5px solid #d0d5dd;
-      border-radius: 999px;
-      background: #fff;
-      color: #344054;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.2s;
-      line-height: 1.4;
-    }
-    .capsule:hover {
-      border-color: #7c5cfc;
-      color: #7c5cfc;
-      background: #f5f0ff;
-    }
-    .capsule:active { transform: scale(0.96); }
-    .thinking-area { margin-top: 16px; }
-    .thinking-area textarea { min-height: 140px; }
-    .bottom { margin-top: 4px; display: flex; gap: 10px; }
-    .bottom .btn-primary,
-    .bottom .btn-outline { flex: 1; }
-    .btn-outline {
-      padding: 14px 0;
-      background: #fff;
-      color: #7c5cfc;
-      border: 1.5px solid #7c5cfc;
-      font-size: 16px;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(124,92,252,0.12);
-    }
-    .btn-outline:hover { background: #f5f0ff; transform: translateY(-1px); }
-    .btn-outline:active { transform: scale(0.98); }
-    .btn-paste {
-      width: 100%;
-      padding: 12px 0;
-      background: #e8f5e9;
-      color: #2e7d32;
-      border: 1.5px solid #66bb6a;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .btn-paste:hover { background: #c8e6c9; }
-    .btn-paste:active { transform: scale(0.98); }
-  </style>
-</head>
-<body>
-  <div class="app">
-    <div class="header">
-      <h1>伴读副驾</h1>
-      <div class="sub">记录你的阅读灵感</div>
-    </div>
 
+    btnRefresh.onclick = () => {
+      const text = receiveArea.value.trim()
+      if (!text) { alert('请先通过粘贴或模拟接收填入原文'); return }
+      loadAIQuestions(text)
+    }
     <div class="card">
       <div class="card-title">📖 上下文接收区</div>
       <div class="row">
@@ -185,7 +28,10 @@
     </div>
 
     <div class="card ai-section" id="aiSection">
-      <div class="card-title">🤖 AI 引导思考</div>
+      <div class="card-title card-title-row">
+        <span>🤖 AI 引导思考</span>
+        <button class="btn btn-sm" id="btnRefresh" style="font-size:12px;padding:4px 10px;display:none;">🔄 刷新换一批</button>
+      </div>
       <div class="capsule-bar" id="capsuleBar"></div>
     </div>
 
@@ -218,12 +64,13 @@
     const aiSection = document.getElementById('aiSection')
     const capsuleBar = document.getElementById('capsuleBar')
     const btnSimulate = document.getElementById('btnSimulate')
+    const btnRefresh = document.getElementById('btnRefresh')
 
     const FAKE_TEXT = '他看着那扇紧闭的门，手心渗出了汗水，最终还是把钥匙放回了口袋。'
     const TEST_WHITELIST = ['李寻欢', '飞刀']
 
     async function fetchAIQuestions(text, whitelist) {
-      const systemPrompt = '你是一个专业的文学伴读助手。你的任务是根据读者提供的小说原文，提出3个简短的启发式思考切入点。为了保证严谨性，请严格参考提供的【专有名词白名单】，绝不能在提问中编造白名单之外的人名、地名或设定。请必须严格返回一个 JSON 数组，包含3个字符串，例如：["角色A为什么这么做？", "这个细节暗示了什么？", "这里的环境描写渲染了什么氛围？"]。不要输出任何 Markdown 标记（如 ```json）或多余的解释文字。'
+      const systemPrompt = '你是一位拥有海量阅读经验的资深文学评论家与顶级小说编辑。你的任务是敏锐地洞察读者提供的小说片段，并提出 3 个极具启发性、能引发深度思考的问题。提问切入点建议涵盖：人物深层心理与动机的张力、环境/细节描写的隐喻与潜台词、或是叙事结构上的伏笔与构式作用。问题要简短犀利，拒绝泛泛而谈。【强制约束】：必须严格基于传入的【专有名词白名单】进行提问，绝不允许在提问中编造、虚构白名单之外的人名、地名或任何专有设定。请必须严格返回一个 JSON 数组，包含3个字符串，不要输出任何多余的 Markdown 标记或解释文字。'
 
       const userPrompt = JSON.stringify({ text, whitelist })
 
@@ -251,13 +98,11 @@
       return JSON.parse(content)
     }
 
-    async function receiveText(text) {
-      receiveArea.value = text
-      btnSimulate.textContent = 'AI 思考中...'
-      btnSimulate.disabled = true
-
+    async function loadAIQuestions(text) {
       const book = await db.books.limit(1).first()
       const whitelist = book?.entityWhitelist || []
+      btnRefresh.textContent = '思考中...'
+      btnRefresh.disabled = true
 
       try {
         const questions = await fetchAIQuestions(text, whitelist)
@@ -265,12 +110,24 @@
           `<span class="capsule" data-text="${q.replace(/"/g, '&quot;')}">${q}</span>`
         ).join('')
         aiSection.style.display = 'block'
+        btnRefresh.style.display = ''
       } catch (err) {
         alert('AI 请求失败：' + err.message)
       } finally {
-        btnSimulate.textContent = '模拟接收'
-        btnSimulate.disabled = false
+        btnRefresh.textContent = '🔄 刷新换一批'
+        btnRefresh.disabled = false
       }
+    }
+
+    async function receiveText(text) {
+      receiveArea.value = text
+      btnSimulate.textContent = 'AI 思考中...'
+      btnSimulate.disabled = true
+
+      await loadAIQuestions(text)
+
+      btnSimulate.textContent = '模拟接收'
+      btnSimulate.disabled = false
     }
 
     btnSimulate.onclick = () => receiveText(FAKE_TEXT)
@@ -389,6 +246,12 @@
       }
       if (!confirm(`确认导出《${book.title}》的全部思考笔记吗？`)) return
       await exportBookNotes(book.id)
+    }
+
+    btnRefresh.onclick = () => {
+      const text = receiveArea.value.trim()
+      if (!text) { alert('请先通过粘贴或模拟接收填入原文'); return }
+      loadAIQuestions(text)
     }
   </script>
 </body>
