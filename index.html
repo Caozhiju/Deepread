@@ -485,6 +485,21 @@
     <span>卡片已移入回收站</span>
     <button class="btn btn-sm" id="undoBtn">↩️ 撤销</button>
   </div>
+
+  <div class="modal-overlay" id="exportModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📤 导出格式选择</h2>
+        <button class="modal-close" id="exportClose">&times;</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button class="btn btn-primary" id="exportTxt">📄 纯文本 (.txt)</button>
+        <button class="btn btn-outline" id="exportMd">📝 标准 Markdown (.md)</button>
+        <button class="btn btn-outline" id="exportDoc">📘 Word 文档 (.doc)</button>
+        <button class="btn btn-outline" id="exportJson">💾 数据备份 (.json)</button>
+      </div>
+    </div>
+  </div>
   <script>
     if (navigator.serviceWorker) {
       navigator.serviceWorker.register('./sw.js')
@@ -606,28 +621,12 @@
       thoughtArea.focus()
     })
 
-    function exportAllNotes() {
-      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
-      if (!notes.length) { alert('当前没有可导出的笔记'); return }
-
-      const lines = ['# 我的全部阅读思考笔记', '']
-      for (const n of notes) {
-        lines.push('---')
-        lines.push(`### ${n.date}`)
-        lines.push(`> **原文高亮**：${n.text}`)
-        lines.push('')
-        lines.push(`**我的思考**：${n.thought}`)
-        lines.push('')
-      }
-      lines.push('---')
-      lines.push(`> *笔记导出时间：${new Date().toLocaleString()}*`)
-
-      const md = lines.join('\n')
-      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+    function downloadFile(content, fileName, mimeType) {
+      const blob = new Blob([content], { type: mimeType + ';charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = '我的阅读笔记.md'
+      a.download = fileName
       a.style.display = 'none'
       document.body.appendChild(a)
       a.click()
@@ -635,12 +634,91 @@
       URL.revokeObjectURL(url)
     }
 
+    function buildNotesMarkdown() {
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      if (!notes.length) { alert('当前没有可导出的笔记'); return null }
+      const lines = ['# 我的全部阅读思考笔记', '']
+      for (const n of notes) {
+        lines.push('---')
+        lines.push(`### ${n.date}`)
+        lines.push(`> **原文高亮**：${n.text}`)
+        lines.push('')
+        lines.push(`**我的思考**：${n.thought}`)
+        if (n.summary) { lines.push(''); lines.push(`**AI 总结**：${n.summary}`) }
+        lines.push('')
+      }
+      lines.push('---')
+      lines.push(`> *笔记导出时间：${new Date().toLocaleString()}*`)
+      return lines.join('\n')
+    }
+
+    function mdToPlainText(md) {
+      return md
+        .replace(/^### /gm, '')
+        .replace(/^# /gm, '')
+        .replace(/^> /gm, '')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/\* (.+)/g, '- $1')
+        .replace(/---/g, '————————')
+        .replace(/\n{3,}/g, '\n\n')
+    }
+
+    function exportTxt() {
+      const md = buildNotesMarkdown()
+      if (!md) return
+      downloadFile(mdToPlainText(md), '我的阅读笔记.txt', 'text/plain')
+      closeExport()
+    }
+
+    function exportMd() {
+      const md = buildNotesMarkdown()
+      if (!md) return
+      downloadFile(md, '我的阅读笔记.md', 'text/markdown')
+      closeExport()
+    }
+
+    function exportDoc() {
+      const md = buildNotesMarkdown()
+      if (!md) return
+      const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>阅读笔记</title></head><body>' +
+        md.replace(/\n/g, '<br>').replace(/### (.+)/g, '<h3>$1</h3>').replace(/# (.+)/g, '<h1>$1</h1>')
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/^> (.+)/gm, '<blockquote>$1</blockquote>') +
+        '</body></html>'
+      downloadFile(html, '我的阅读笔记.doc', 'application/msword')
+      closeExport()
+    }
+
+    function exportJson() {
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      const bin = JSON.parse(localStorage.getItem('recycle_bin') || '[]')
+      const data = { exportedAt: new Date().toISOString(), reading_notes: notes, recycle_bin: bin }
+      if (!notes.length && !bin.length) { alert('没有数据可导出'); return }
+      downloadFile(JSON.stringify(data, null, 2), '阅读笔记备份.json', 'application/json')
+      closeExport()
+    }
+
+    function closeExport() {
+      document.getElementById('exportModal').classList.remove('open')
+    }
+
+    document.getElementById('btnExport').onclick = () => {
+      document.getElementById('exportModal').classList.add('open')
+    }
+
+    document.getElementById('exportClose').onclick = closeExport
+    document.getElementById('exportModal').onclick = (e) => {
+      if (e.target === e.currentTarget) closeExport()
+    }
+    document.getElementById('exportTxt').onclick = exportTxt
+    document.getElementById('exportMd').onclick = exportMd
+    document.getElementById('exportDoc').onclick = exportDoc
+    document.getElementById('exportJson').onclick = exportJson
+
     document.getElementById('btnSave').onclick = () => {
       const text = receiveArea.value.trim()
       const thought = thoughtArea.value.trim()
       if (!text) { alert('请先接收原文'); return }
       if (!thought) { alert('请写下你的思考'); return }
-
       const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
       notes.push({ date: new Date().toLocaleString(), text, thought })
       localStorage.setItem('reading_notes', JSON.stringify(notes))
@@ -649,10 +727,6 @@
       thoughtArea.value = ''
       aiSection.style.display = 'none'
       capsuleBar.innerHTML = ''
-    }
-
-    document.getElementById('btnExport').onclick = () => {
-      exportAllNotes()
     }
 
     btnRefresh.onclick = () => {
