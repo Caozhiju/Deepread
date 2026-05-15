@@ -309,7 +309,7 @@
     async function fetchAIQuestions(text, whitelist) {
       const systemPrompt = '你是一位拥有海量阅读经验的资深文学评论家与顶级小说编辑。你的任务是敏锐地洞察读者提供的小说片段，并提出 3 个极具启发性、能引发深度思考的问题。提问切入点建议涵盖：人物深层心理与动机的张力、环境/细节描写的隐喻与潜台词、或是叙事结构上的伏笔与构式作用。问题要简短犀利，拒绝泛泛而谈。【强制约束】：必须严格基于传入的【专有名词白名单】进行提问，绝不允许在提问中编造、虚构白名单之外的人名、地名或任何专有设定。请必须严格返回一个 JSON 数组，包含3个字符串，不要输出任何多余的 Markdown 标记或解释文字。'
 
-      const userPrompt = JSON.stringify({ text, whitelist })
+      const userPrompt = '原文：' + text + '\n专有名词白名单：' + (whitelist.length ? whitelist.join('、') : '无')
 
       const res = await fetch(API_URL, {
         method: 'POST',
@@ -337,7 +337,7 @@
 
     async function evaluateThought(originalText, userThought, whitelist) {
       const systemPrompt = '你是一位拥有极高文学素养的资深文学评论家。现在，读者提供了一段小说原文，以及他针对这段原文写下的个人思考。你需要对读者的思考进行专业的【点评与升华】。\n\n开始前请先做简单判断：如果读者提供的内容少于3个字，或者纯粹是无规律乱码（如连续无意义字母或数字），请温和地提示他认真输入。否则，请针对他的内容，结合小说原文进行深度文学点评。注意：严格遵守专有名词白名单。\n\n对于正常内容，请按以下结构输出回答：\n\n闪光点：肯定读者思考中敏锐、独特的切入点。\n\n升华建议：以引导性的语言，提出一个可以进一步深挖的文学维度（如：动机的潜台词、叙事视角的张力、特定词汇/构式的隐喻等）。\n语气要像一位亦师亦友的资深书友，真诚且富有洞察力。\n【强制安全约束】：你的点评必须严格基于传入的【专有名词白名单】，绝不允许在点评中虚构、捏造白名单之外的人名、地名或设定。'
-      const userPrompt = JSON.stringify({ originalText, userThought, whitelist })
+      const userPrompt = '小说原文：' + originalText + '\n\n读者的思考：' + userThought + '\n\n专有名词白名单：' + (whitelist.length ? whitelist.join('、') : '无')
 
       const res = await fetch(API_URL, {
         method: 'POST',
