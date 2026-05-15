@@ -374,6 +374,28 @@
     @media (max-width: 440px) {
       .card-grid { grid-template-columns: 1fr; }
     }
+    .undo-toast {
+      display: none;
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1d2939;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      align-items: center;
+      gap: 12px;
+      z-index: 2000;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+    .undo-toast .btn-sm {
+      background: #7c5cfc;
+      color: #fff;
+      padding: 6px 14px;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -459,6 +481,10 @@
     </div>
   </div>
 
+  <div class="undo-toast" id="undoToast">
+    <span>卡片已移入回收站</span>
+    <button class="btn btn-sm" id="undoBtn">↩️ 撤销</button>
+  </div>
   <script>
     if (navigator.serviceWorker) {
       navigator.serviceWorker.register('./sw.js')
@@ -788,21 +814,64 @@
       }).join('')
     }
 
-    function showCard(idx) {
+    function showCardDetails(displayIdx) {
       const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
-      const realIdx = notes.length - 1 - idx
-      return notes[realIdx]
+      const realIdx = notes.length - 1 - displayIdx
+      const note = notes[realIdx]
+      if (!note) return
+      document.getElementById('detailBody').innerHTML =
+        '<div class="detail-section"><div class="label">📅 日期</div><div class="value">' + (note.date || '') + '</div></div>' +
+        '<div class="detail-section"><div class="label">📖 原文</div><div class="value">' + (note.text || '') + '</div></div>' +
+        '<div class="detail-section"><div class="label">✏️ 我的思考</div><div class="value">' + (note.thought || '') + '</div></div>' +
+        (note.summary ? '<div class="detail-section"><div class="label">📄 AI 研讨总结</div><div class="value">' + note.summary + '</div></div>' : '')
+      document.getElementById('detailModal').classList.add('open')
     }
 
-    function deleteCard(idx) {
+    function openShareMenu(displayIdx) {
       const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
-      const realIdx = notes.length - 1 - idx
+      const realIdx = notes.length - 1 - displayIdx
+      const note = notes[realIdx]
+      if (!note) return
+      window._shareNote = note
+      document.getElementById('shareBody').innerHTML =
+        '<div class="share-card" id="shareCardPreview">' +
+        '<div class="s-header">伴读副驾 · 语料萃取</div>' +
+        '<div class="s-quote">' + (note.text || '') + '</div>' +
+        '<div class="s-body"><strong>我的思考：</strong>' + (note.thought || '') + '</div>' +
+        (note.summary ? '<div class="s-body"><strong>AI 升华：</strong>' + note.summary + '</div>' : '') +
+        '<div class="s-footer">' + (note.date || '') + ' · TCSOL 研究员手记</div></div>'
+      document.getElementById('shareModal').classList.add('open')
+    }
+
+    function moveToRecycleBin(displayIdx) {
+      if (!confirm('确定删除这条笔记吗？删除后可从回收站恢复。')) return
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      const realIdx = notes.length - 1 - displayIdx
       const card = notes.splice(realIdx, 1)[0]
       if (!card) return
       const bin = JSON.parse(localStorage.getItem('recycle_bin') || '[]')
       bin.push(card)
       localStorage.setItem('recycle_bin', JSON.stringify(bin))
       localStorage.setItem('reading_notes', JSON.stringify(notes))
+      renderLibrary()
+      const toast = document.getElementById('undoToast')
+      toast.style.display = 'flex'
+      window._undoCard = card
+      clearTimeout(toast._timer)
+      toast._timer = setTimeout(() => { toast.style.display = 'none' }, 6000)
+    }
+
+    document.getElementById('undoBtn').onclick = () => {
+      const card = window._undoCard
+      if (!card) return
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      notes.push(card)
+      localStorage.setItem('reading_notes', JSON.stringify(notes))
+      const bin = JSON.parse(localStorage.getItem('recycle_bin') || '[]')
+      const idx = bin.findIndex(b => b.date === card.date && b.text === card.text)
+      if (idx !== -1) bin.splice(idx, 1)
+      localStorage.setItem('recycle_bin', JSON.stringify(bin))
+      document.getElementById('undoToast').style.display = 'none'
       renderLibrary()
     }
 
@@ -818,6 +887,8 @@
     }
 
     function permanentDeleteCard(binIdx) {
+      if (!confirm('确定要永久删除这条笔记吗？此操作不可恢复！')) return
+      if (!confirm('再次确认：这条笔记将被彻底删除。')) return
       const bin = JSON.parse(localStorage.getItem('recycle_bin') || '[]')
       bin.splice(binIdx, 1)
       localStorage.setItem('recycle_bin', JSON.stringify(bin))
@@ -828,10 +899,8 @@
       const allNotes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
       const body = document.getElementById('modalBody')
       if (!allNotes.length) {
-      body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">卡片库空空如也</p>' +
-          '<button class="btn btn-sm" id="goRecycleBtn" style="display:block;margin:0 auto;">🗑️ 查看回收站</button>'
-        const btn = document.getElementById('goRecycleBtn')
-        if (btn) btn.onclick = renderRecycleBin
+        body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">卡片库空空如也</p>' +
+          '<button class="btn btn-sm" onclick="renderRecycleBin()" style="display:block;margin:0 auto;">🗑️ 查看回收站</button>'
         return
       }
       body.innerHTML = allNotes.slice().reverse().map((n, displayIdx) => {
@@ -840,13 +909,12 @@
           '<span class="badge">' + (n.date || '') + '</span>' +
           '<div class="preview">' + excerpt + '</div>' +
           '<div class="card-actions">' +
-          '<button class="btn btn-sm" data-action="view" data-index="' + displayIdx + '">🔍 详情</button>' +
-          '<button class="btn btn-sm" data-action="share" data-index="' + displayIdx + '">📤 分享</button>' +
-          '<button class="btn btn-sm" data-action="delete" data-index="' + displayIdx + '" style="background:#fee2e2;color:#991b1b;">🗑️ 删除</button>' +
+          '<button class="btn btn-sm" onclick="showCardDetails(' + displayIdx + ')">🔍 详情</button>' +
+          '<button class="btn btn-sm" onclick="openShareMenu(' + displayIdx + ')">📤 分享</button>' +
+          '<button class="btn btn-sm" onclick="moveToRecycleBin(' + displayIdx + ')" style="background:#fee2e2;color:#991b1b;">🗑️ 删除</button>' +
           '</div></div>'
       }).join('') +
-      '<button class="btn btn-sm" id="goRecycleBtn" style="display:block;margin:8px auto 0;">🗑️ 查看回收站</button>'
-      document.getElementById('goRecycleBtn').onclick = renderRecycleBin
+      '<button class="btn btn-sm" onclick="renderRecycleBin()" style="display:block;margin:8px auto 0;">🗑️ 查看回收站</button>'
     }
 
     function renderRecycleBin() {
@@ -854,8 +922,7 @@
       const body = document.getElementById('modalBody')
       if (!bin.length) {
         body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">回收站是空的</p>' +
-          '<button class="btn btn-sm" id="backToLibraryBtn" style="display:block;margin:0 auto;">📖 返回卡片库</button>'
-        document.getElementById('backToLibraryBtn').onclick = renderLibrary
+          '<button class="btn btn-sm" onclick="renderLibrary()" style="display:block;margin:0 auto;">📖 返回卡片库</button>'
         return
       }
       body.innerHTML = '<div style="font-size:14px;font-weight:600;color:#6b7280;margin-bottom:12px;">🗑️ 回收站</div>' +
@@ -867,27 +934,11 @@
             '<span class="badge">' + (n.date || '') + '</span>' +
             '<div class="preview">' + excerpt + '</div>' +
             '<div class="card-actions">' +
-            '<button class="btn btn-sm" data-recycle="restore" data-idx="' + realIdx + '">🔄 恢复</button>' +
-            '<button class="btn btn-sm" data-recycle="permanent" data-idx="' + realIdx + '" style="background:#fee2e2;color:#991b1b;">🔥 彻底删除</button>' +
+            '<button class="btn btn-sm" onclick="restoreCard(' + realIdx + ')">🔄 恢复</button>' +
+            '<button class="btn btn-sm" onclick="permanentDeleteCard(' + realIdx + ')" style="background:#fee2e2;color:#991b1b;">🔥 彻底删除</button>' +
             '</div></div>'
         }).join('') + '</div>' +
-        '<button class="btn btn-sm" id="backToLibraryBtn" style="display:block;margin:12px auto 0;">📖 返回卡片库</button>'
-      document.getElementById('backToLibraryBtn').onclick = renderLibrary
-    }
-
-    function shareCard(idx) {
-      const note = showCard(idx)
-      if (!note) return
-      window._shareNote = note
-      const html = '<div class="share-card" id="shareCardPreview">' +
-        '<div class="s-header">伴读副驾 · 语料萃取</div>' +
-        '<div class="s-quote">' + (note.text || '') + '</div>' +
-        '<div class="s-body"><strong>我的思考：</strong>' + (note.thought || '') + '</div>' +
-        (note.summary ? '<div class="s-body"><strong>AI 升华：</strong>' + note.summary + '</div>' : '') +
-        '<div class="s-footer">' + (note.date || '') + ' · TCSOL 研究员手记</div>' +
-        '</div>'
-      document.getElementById('shareBody').innerHTML = html
-      document.getElementById('shareModal').classList.add('open')
+        '<button class="btn btn-sm" onclick="renderLibrary()" style="display:block;margin:12px auto 0;">📖 返回卡片库</button>'
     }
 
     document.getElementById('btnLibrary').onclick = () => {
@@ -898,43 +949,8 @@
     document.getElementById('libraryModal').onclick = (e) => {
       if (e.target === e.currentTarget) document.getElementById('libraryModal').classList.remove('open')
     }
-
     document.getElementById('modalClose').onclick = () => {
       document.getElementById('libraryModal').classList.remove('open')
-    }
-
-    document.getElementById('modalBody').onclick = (e) => {
-      const btn = e.target.closest('[data-action]')
-      if (btn) {
-        const idx = parseInt(btn.dataset.index)
-        const note = showCard(idx)
-        if (!note) return
-        if (btn.dataset.action === 'view') {
-          document.getElementById('detailBody').innerHTML =
-            '<div class="detail-section"><div class="label">📅 日期</div><div class="value">' + (note.date || '') + '</div></div>' +
-            '<div class="detail-section"><div class="label">📖 原文</div><div class="value">' + (note.text || '') + '</div></div>' +
-            '<div class="detail-section"><div class="label">✏️ 我的思考</div><div class="value">' + (note.thought || '') + '</div></div>' +
-            (note.summary ? '<div class="detail-section"><div class="label">📄 AI 研讨总结</div><div class="value">' + note.summary + '</div></div>' : '')
-          document.getElementById('detailModal').classList.add('open')
-        } else if (btn.dataset.action === 'share') {
-          shareCard(idx)
-        } else if (btn.dataset.action === 'delete') {
-          if (!confirm('确定删除这条笔记吗？删除后可从回收站恢复。')) return
-          deleteCard(idx)
-        }
-        return
-      }
-      const rbtn = e.target.closest('[data-recycle]')
-      if (rbtn) {
-        const idx = parseInt(rbtn.dataset.idx)
-        if (rbtn.dataset.recycle === 'restore') {
-          restoreCard(idx)
-        } else if (rbtn.dataset.recycle === 'permanent') {
-          if (!confirm('确定要永久删除这条笔记吗？此操作不可恢复！')) return
-          if (!confirm('再次确认：这条笔记将被彻底删除。')) return
-          permanentDeleteCard(idx)
-        }
-      }
     }
 
     document.getElementById('shareClose').onclick = () => {
