@@ -6,13 +6,6 @@
   <title>伴读副驾</title>
   <link rel="icon" href="data:," />
   <link rel="manifest" href="manifest.json" />
-  <script type="importmap">
-  {
-    "imports": {
-      "dexie": "https://cdn.jsdelivr.net/npm/dexie@4.0.10/dist/dexie.mjs"
-    }
-  }
-  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -289,8 +282,6 @@
   </div>
 
   <script type="module">
-    import ReadingDB from './db.js'
-
     if (navigator.serviceWorker) {
       navigator.serviceWorker.register('./sw.js')
     }
@@ -299,7 +290,9 @@
     const API_KEY = 'sk-FL4bw67mtkAFIsj9OjyccSZzFyiIgXWKaypcCy3pHkPAhvLG'
     const MODEL_NAME = 'gpt-4o-mini'
 
-    const db = new ReadingDB()
+    function getWhitelist() {
+      try { return JSON.parse(localStorage.getItem('whitelist') || '[]') } catch { return [] }
+    }
 
     const receiveArea = document.getElementById('receiveArea')
     const thoughtArea = document.getElementById('thoughtArea')
@@ -366,8 +359,7 @@
     }
 
     async function loadAIQuestions(text) {
-      const book = await db.books.limit(1).first()
-      const whitelist = book?.entityWhitelist || []
+      const whitelist = getWhitelist()
       btnRefresh.textContent = '思考中...'
       btnRefresh.disabled = true
 
@@ -493,8 +485,7 @@
       btn.textContent = '老编辑审稿中...'
       btn.disabled = true
 
-      const book = await db.books.limit(1).first()
-      const whitelist = book?.entityWhitelist || []
+      const whitelist = getWhitelist()
 
       try {
         const evaluation = await evaluateThought(originalText, userThought, whitelist)
