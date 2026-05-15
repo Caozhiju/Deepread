@@ -393,19 +393,23 @@
 
     btnSimulate.onclick = () => receiveText(FAKE_TEXT)
 
-    document.getElementById('btnPaste').onclick = async () => {
-      try {
-        const text = await navigator.clipboard.readText()
-        if (!text || text.trim() === '') {
-          alert('剪贴板是空的哦')
-          return
-        }
-        document.getElementById('receiveArea').value = text.trim()
-        loadAIQuestions(text.trim())
-      } catch (err) {
-        console.error('读取剪贴板失败: ', err)
-        alert('浏览器没有剪贴板读取权限，请直接在输入框中长按手动粘贴，然后点击旁边的[模拟接收]按钮。')
-      }
+    document.getElementById('btnPaste').onclick = () => {
+      const area = document.getElementById('receiveArea')
+      area.readOnly = false
+      area.value = ''
+      area.placeholder = '👆 长按此处选择「粘贴」'
+      area.focus()
+      area.addEventListener('paste', function auto() {
+        setTimeout(() => {
+          const val = area.value.trim()
+          if (val) {
+            area.readOnly = true
+            area.placeholder = '等待接收微信读书分享的原文...'
+            loadAIQuestions(val)
+          }
+        }, 50)
+        area.removeEventListener('paste', auto)
+      }, { once: true })
     }
 
     window.addEventListener('load', () => {
