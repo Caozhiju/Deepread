@@ -794,26 +794,6 @@
       alert('✅ 卡片已保存（含学术总结）')
     }
 
-    function renderLibrary() {
-      const allNotes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
-      const body = document.getElementById('modalBody')
-      if (!allNotes.length) {
-        body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">卡片库空空如也</p>'
-        return
-      }
-      body.innerHTML = allNotes.slice().reverse().map((n, displayIdx) => {
-        const excerpt = (n.text || '').length > 30 ? n.text.slice(0, 30) + '…' : (n.text || '')
-        return '<div class="library-card">' +
-          '<span class="badge">' + (n.date || '') + '</span>' +
-          '<div class="preview">' + excerpt + '</div>' +
-          '<div class="card-actions">' +
-          '<button class="btn btn-sm" data-action="view" data-index="' + displayIdx + '">🔍 查看详情</button>' +
-          '<button class="btn btn-sm" data-action="share" data-index="' + displayIdx + '">📤 分享</button>' +
-          '<button class="btn btn-sm" data-action="delete" data-index="' + displayIdx + '" style="background:#fee2e2;color:#991b1b;">🗑️ 删除</button>' +
-          '</div></div>'
-      }).join('')
-    }
-
     function showCardDetails(displayIdx) {
       const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
       const realIdx = notes.length - 1 - displayIdx
@@ -900,7 +880,8 @@
       const body = document.getElementById('modalBody')
       if (!allNotes.length) {
         body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">卡片库空空如也</p>' +
-          '<button class="btn btn-sm" onclick="renderRecycleBin()" style="display:block;margin:0 auto;">🗑️ 查看回收站</button>'
+          '<button class="btn btn-sm" id="goRecycleBtn" style="display:block;margin:0 auto;">🗑️ 查看回收站</button>'
+        document.getElementById('goRecycleBtn').onclick = renderRecycleBin
         return
       }
       body.innerHTML = allNotes.slice().reverse().map((n, displayIdx) => {
@@ -909,12 +890,13 @@
           '<span class="badge">' + (n.date || '') + '</span>' +
           '<div class="preview">' + excerpt + '</div>' +
           '<div class="card-actions">' +
-          '<button class="btn btn-sm" onclick="showCardDetails(' + displayIdx + ')">🔍 详情</button>' +
-          '<button class="btn btn-sm" onclick="openShareMenu(' + displayIdx + ')">📤 分享</button>' +
-          '<button class="btn btn-sm" onclick="moveToRecycleBin(' + displayIdx + ')" style="background:#fee2e2;color:#991b1b;">🗑️ 删除</button>' +
+          '<button class="btn btn-sm action-btn btn-detail" data-index="' + displayIdx + '">🔍 详情</button>' +
+          '<button class="btn btn-sm action-btn btn-share" data-index="' + displayIdx + '">📤 分享</button>' +
+          '<button class="btn btn-sm action-btn btn-delete" data-index="' + displayIdx + '" style="background:#fee2e2;color:#991b1b;">🗑️ 删除</button>' +
           '</div></div>'
       }).join('') +
-      '<button class="btn btn-sm" onclick="renderRecycleBin()" style="display:block;margin:8px auto 0;">🗑️ 查看回收站</button>'
+      '<button class="btn btn-sm" id="goRecycleBtn" style="display:block;margin:8px auto 0;">🗑️ 查看回收站</button>'
+      document.getElementById('goRecycleBtn').onclick = renderRecycleBin
     }
 
     function renderRecycleBin() {
@@ -922,7 +904,8 @@
       const body = document.getElementById('modalBody')
       if (!bin.length) {
         body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">回收站是空的</p>' +
-          '<button class="btn btn-sm" onclick="renderLibrary()" style="display:block;margin:0 auto;">📖 返回卡片库</button>'
+          '<button class="btn btn-sm" id="backToLibraryBtn" style="display:block;margin:0 auto;">📖 返回卡片库</button>'
+        document.getElementById('backToLibraryBtn').onclick = renderLibrary
         return
       }
       body.innerHTML = '<div style="font-size:14px;font-weight:600;color:#6b7280;margin-bottom:12px;">🗑️ 回收站</div>' +
@@ -934,11 +917,12 @@
             '<span class="badge">' + (n.date || '') + '</span>' +
             '<div class="preview">' + excerpt + '</div>' +
             '<div class="card-actions">' +
-            '<button class="btn btn-sm" onclick="restoreCard(' + realIdx + ')">🔄 恢复</button>' +
-            '<button class="btn btn-sm" onclick="permanentDeleteCard(' + realIdx + ')" style="background:#fee2e2;color:#991b1b;">🔥 彻底删除</button>' +
+            '<button class="btn btn-sm action-btn btn-restore" data-index="' + realIdx + '">🔄 恢复</button>' +
+            '<button class="btn btn-sm action-btn btn-permanent" data-index="' + realIdx + '" style="background:#fee2e2;color:#991b1b;">🔥 彻底删除</button>' +
             '</div></div>'
         }).join('') + '</div>' +
-        '<button class="btn btn-sm" onclick="renderLibrary()" style="display:block;margin:12px auto 0;">📖 返回卡片库</button>'
+        '<button class="btn btn-sm" id="backToLibraryBtn" style="display:block;margin:12px auto 0;">📖 返回卡片库</button>'
+      document.getElementById('backToLibraryBtn').onclick = renderLibrary
     }
 
     document.getElementById('btnLibrary').onclick = () => {
@@ -952,6 +936,17 @@
     document.getElementById('modalClose').onclick = () => {
       document.getElementById('libraryModal').classList.remove('open')
     }
+
+    document.getElementById('modalBody').addEventListener('click', function(e) {
+      const btn = e.target.closest('button.action-btn')
+      if (!btn) return
+      const idx = parseInt(btn.getAttribute('data-index'), 10)
+      if (btn.classList.contains('btn-detail')) { showCardDetails(idx); return }
+      if (btn.classList.contains('btn-share')) { openShareMenu(idx); return }
+      if (btn.classList.contains('btn-delete')) { moveToRecycleBin(idx); return }
+      if (btn.classList.contains('btn-restore')) { restoreCard(idx); return }
+      if (btn.classList.contains('btn-permanent')) { permanentDeleteCard(idx); return }
+    })
 
     document.getElementById('shareClose').onclick = () => {
       document.getElementById('shareModal').classList.remove('open')
