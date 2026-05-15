@@ -152,6 +152,20 @@
     }
     .btn-outline:hover { background: #f5f0ff; transform: translateY(-1px); }
     .btn-outline:active { transform: scale(0.98); }
+    .btn-paste {
+      width: 100%;
+      padding: 12px 0;
+      background: #e8f5e9;
+      color: #2e7d32;
+      border: 1.5px solid #66bb6a;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-paste:hover { background: #c8e6c9; }
+    .btn-paste:active { transform: scale(0.98); }
   </style>
 </head>
 <body>
@@ -167,6 +181,7 @@
         <textarea id="receiveArea" rows="3" readonly placeholder="等待接收微信读书分享的原文..."></textarea>
         <button class="btn btn-sm" id="btnSimulate">模拟接收</button>
       </div>
+      <button class="btn btn-paste" id="btnPaste" style="margin-top:8px;">📋 粘贴并思考</button>
     </div>
 
     <div class="card ai-section" id="aiSection">
@@ -259,6 +274,19 @@
     }
 
     btnSimulate.onclick = () => receiveText(FAKE_TEXT)
+
+    document.getElementById('btnPaste').onclick = async () => {
+      try {
+        const text = await navigator.clipboard.readText()
+        if (!text.trim()) {
+          alert('剪贴板为空，请先复制文本')
+          return
+        }
+        receiveText(text.trim())
+      } catch (err) {
+        alert('无法读取剪贴板：' + err.message + '。请确保已授予剪贴板权限，或改用"模拟接收"按钮。')
+      }
+    }
 
     window.addEventListener('load', () => {
       const params = new URLSearchParams(window.location.search)
