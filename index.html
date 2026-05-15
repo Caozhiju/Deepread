@@ -279,14 +279,14 @@
       }
 
       const data = await res.json()
-      let content = data.choices[0].message.content
-      const match = content.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/)
-      if (match) content = match[1]
-      return JSON.parse(content)
+      const responseText = data.choices[0].message.content
+      const match = responseText.match(/\[[\s\S]*\]/)
+      if (!match) throw new Error('无法解析 AI 返回的格式')
+      return JSON.parse(match[0])
     }
 
     async function evaluateThought(originalText, userThought, whitelist) {
-      const systemPrompt = '你是一位拥有极高文学素养的资深文学评论家。现在，读者提供了一段小说原文，以及他针对这段原文写下的个人思考。你需要对读者的思考进行专业的【点评与升华】。请按以下结构输出回答：\n\n闪光点：肯定读者思考中敏锐、独特的切入点。\n\n升华建议：以引导性的语言，提出一个可以进一步深挖的文学维度（如：动机的潜台词、叙事视角的张力、特定词汇/构式的隐喻等）。\n语气要像一位亦师亦友的资深书友，真诚且富有洞察力。\n【强制安全约束】：你的点评必须严格基于传入的【专有名词白名单】，绝不允许在点评中虚构、捏造白名单之外的人名、地名或设定。'
+      const systemPrompt = '你是一位拥有极高文学素养的资深文学评论家。现在，读者提供了一段小说原文，以及他针对这段原文写下的个人思考。你需要对读者的思考进行专业的【点评与升华】。\n\n【强制前置检验】：在开始点评前，你必须先判断读者的思考内容是否为无意义的乱码（如连续无规律字母 jhhii、数字等）、完全无关的标点符号，或者字数少于3个字的敷衍。如果是，请直接且仅返回这句话："你的思考区似乎输入了无意义的内容，请认真写下你真实的阅读感悟后再让我点评。" 绝对不要进行任何脑补和后续点评。只有在内容有意义时，才按照以下格式输出点评。\n\n请按以下结构输出回答：\n\n闪光点：肯定读者思考中敏锐、独特的切入点。\n\n升华建议：以引导性的语言，提出一个可以进一步深挖的文学维度（如：动机的潜台词、叙事视角的张力、特定词汇/构式的隐喻等）。\n语气要像一位亦师亦友的资深书友，真诚且富有洞察力。\n【强制安全约束】：你的点评必须严格基于传入的【专有名词白名单】，绝不允许在点评中虚构、捏造白名单之外的人名、地名或设定。'
       const userPrompt = JSON.stringify({ originalText, userThought, whitelist })
 
       const res = await fetch(API_URL, {
@@ -372,39 +372,28 @@
       thoughtArea.focus()
     })
 
-    async function exportAllNotes() {
-      const cards = await db.thoughtCards.toArray()
-      if (!cards.length) { alert('当前没有可导出的笔记'); return }
-      cards.sort((a, b) => b.createdAt - a.createdAt)
+    function exportAllNotes() {
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      if (!notes.length) { alert('当前没有可导出的笔记'); return }
 
-      const lines = []
-      lines.push('# 我的全部阅读思考笔记')
-      lines.push('')
-
-      for (const card of cards) {
-        const d = new Date(card.createdAt)
-        const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-        const book = await db.books.get(card.bookId)
-        const title = book ? `《${book.title}》` : '（未关联书籍）'
+      const lines = ['# 我的全部阅读思考笔记', '']
+      for (const n of notes) {
         lines.push('---')
-        lines.push(`### ${ds} ${title}`)
-        lines.push(`> **原文高亮**：${card.highlightText}`)
+        lines.push(`### ${n.date}`)
+        lines.push(`> **原文高亮**：${n.text}`)
         lines.push('')
-        lines.push(`**我的思考**：${card.userAnswer}`)
+        lines.push(`**我的思考**：${n.thought}`)
         lines.push('')
       }
-
       lines.push('---')
-      const now = new Date()
-      const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
-      lines.push(`> *笔记导出时间：${ts}*`)
+      lines.push(`> *笔记导出时间：${new Date().toLocaleString()}*`)
 
       const md = lines.join('\n')
       const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `我的全部阅读笔记_${ts.split(' ')[0]}.md`
+      a.download = '我的阅读笔记.md'
       a.style.display = 'none'
       document.body.appendChild(a)
       a.click()
@@ -412,45 +401,24 @@
       URL.revokeObjectURL(url)
     }
 
-    document.getElementById('btnSave').onclick = async () => {
-      const highlightText = receiveArea.value.trim()
-      const userAnswer = thoughtArea.value.trim()
-      if (!highlightText) {
-        alert('请先接收原文')
-        return
-      }
-      if (!userAnswer) {
-        alert('请写下你的思考')
-        return
-      }
+    document.getElementById('btnSave').onclick = () => {
+      const text = receiveArea.value.trim()
+      const thought = thoughtArea.value.trim()
+      if (!text) { alert('请先接收原文'); return }
+      if (!thought) { alert('请写下你的思考'); return }
 
-      const book = await db.books.limit(1).first()
-      if (!book) {
-        alert('数据库中暂无书籍，请先在控制台添加一本')
-        return
-      }
-
-      const capsuleEls = capsuleBar.querySelectorAll('.capsule')
-      const aiQuestions = Array.from(capsuleEls).map(el => el.dataset.text)
-
-      const card = {
-        id: crypto.randomUUID(),
-        bookId: book.id,
-        highlightText,
-        aiQuestions,
-        userAnswer,
-        createdAt: Date.now(),
-      }
-      await db.addThoughtCard(card)
-      alert('✅ 思考卡片已保存！')
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      notes.push({ date: new Date().toLocaleString(), text, thought })
+      localStorage.setItem('reading_notes', JSON.stringify(notes))
+      alert('保存成功')
       receiveArea.value = ''
       thoughtArea.value = ''
       aiSection.style.display = 'none'
       capsuleBar.innerHTML = ''
     }
 
-    document.getElementById('btnExport').onclick = async () => {
-      await exportAllNotes()
+    document.getElementById('btnExport').onclick = () => {
+      exportAllNotes()
     }
 
     btnRefresh.onclick = () => {
