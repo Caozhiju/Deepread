@@ -288,7 +288,7 @@
 
     const API_KEY = 'sk-FL4bw67mtkAFIsj9OjyccSZzFyiIgXWKaypcCy3pHkPAhvLG'
     const MODEL_NAME = 'gpt-4o-mini'
-    const API_URL = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:'
+    const API_URL = location.protocol === 'file:'
       ? 'https://api.chatanywhere.tech/v1/chat/completions'
       : '/api/proxy'
 
