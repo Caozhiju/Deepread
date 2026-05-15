@@ -6,6 +6,7 @@
   <title>伴读副驾</title>
   <link rel="icon" href="data:," />
   <link rel="manifest" href="manifest.json" />
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -335,6 +336,30 @@
       font-size: 12px;
       border-radius: 8px;
     }
+    .library-card.recycled {
+      background: #f3f4f6;
+      border-color: #d1d5db;
+    }
+    .library-card.recycled .badge {
+      background: #e5e7eb;
+      color: #6b7280;
+    }
+    .share-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 28px;
+      max-width: 400px;
+      margin: 0 auto;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    .share-card .s-header { font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #7c5cfc; text-align: center; margin-bottom: 20px; }
+    .share-card .s-quote { font-family: 'Courier New', monospace; font-size: 16px; line-height: 1.8; color: #1d2939; padding: 16px 0; border-top: 1px solid #e4e7ec; border-bottom: 1px solid #e4e7ec; margin-bottom: 16px; white-space: pre-wrap; }
+    .share-card .s-quote::before { content: '「'; color: #7c5cfc; font-size: 24px; }
+    .share-card .s-quote::after { content: '」'; color: #7c5cfc; font-size: 24px; }
+    .share-card .s-body { font-size: 14px; color: #344054; line-height: 1.7; margin-bottom: 12px; white-space: pre-wrap; }
+    .share-card .s-footer { font-size: 11px; color: #98a2b3; text-align: center; border-top: 1px solid #f0f0f5; padding-top: 12px; }
+    .share-options { display: flex; gap: 8px; margin-top: 12px; }
+    .share-options .btn { flex: 1; padding: 10px 0; font-size: 13px; }
     .detail-section { margin-bottom: 16px; }
     .detail-section .label { font-size: 13px; font-weight: 600; color: #344054; margin-bottom: 6px; }
     .detail-section .value {
@@ -385,6 +410,20 @@
           <input type="text" class="chat-input" id="chatReplyInput" placeholder="输入你的追问或反驳...">
           <button class="btn btn-sm" id="chatSendBtn">发送</button>
           <button class="btn btn-sm" id="chatEndBtn" style="background:#fee2e2;color:#991b1b;">🛑 结束探讨并总结</button>
+  <div class="modal-overlay" id="shareModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📤 分享卡片</h2>
+        <button class="modal-close" id="shareClose">&times;</button>
+      </div>
+      <div id="shareBody"></div>
+      <div class="share-options">
+        <button class="btn btn-sm" id="shareAsImage">🖼️ 保存图片</button>
+        <button class="btn btn-sm" id="shareAsMd">📄 导出 .md</button>
+        <button class="btn btn-sm" id="shareAsText">📋 复制文本</button>
+      </div>
+    </div>
+  </div>
   <div class="modal-overlay" id="detailModal">
     <div class="modal-content">
       <div class="modal-header">
@@ -758,20 +797,97 @@
     function deleteCard(idx) {
       const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
       const realIdx = notes.length - 1 - idx
-      notes.splice(realIdx, 1)
+      const card = notes.splice(realIdx, 1)[0]
+      if (!card) return
+      const bin = JSON.parse(localStorage.getItem('recycle_bin') || '[]')
+      bin.push(card)
+      localStorage.setItem('recycle_bin', JSON.stringify(bin))
       localStorage.setItem('reading_notes', JSON.stringify(notes))
       renderLibrary()
+    }
+
+    function restoreCard(binIdx) {
+      const bin = JSON.parse(localStorage.getItem('recycle_bin') || '[]')
+      const card = bin.splice(binIdx, 1)[0]
+      if (!card) return
+      const notes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      notes.push(card)
+      localStorage.setItem('reading_notes', JSON.stringify(notes))
+      localStorage.setItem('recycle_bin', JSON.stringify(bin))
+      renderRecycleBin()
+    }
+
+    function permanentDeleteCard(binIdx) {
+      const bin = JSON.parse(localStorage.getItem('recycle_bin') || '[]')
+      bin.splice(binIdx, 1)
+      localStorage.setItem('recycle_bin', JSON.stringify(bin))
+      renderRecycleBin()
+    }
+
+    function renderLibrary() {
+      const allNotes = JSON.parse(localStorage.getItem('reading_notes') || '[]')
+      const body = document.getElementById('modalBody')
+      if (!allNotes.length) {
+      body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">卡片库空空如也</p>' +
+          '<button class="btn btn-sm" id="goRecycleBtn" style="display:block;margin:0 auto;">🗑️ 查看回收站</button>'
+        const btn = document.getElementById('goRecycleBtn')
+        if (btn) btn.onclick = renderRecycleBin
+        return
+      }
+      body.innerHTML = allNotes.slice().reverse().map((n, displayIdx) => {
+        const excerpt = (n.text || '').length > 30 ? n.text.slice(0, 30) + '…' : (n.text || '')
+        return '<div class="library-card">' +
+          '<span class="badge">' + (n.date || '') + '</span>' +
+          '<div class="preview">' + excerpt + '</div>' +
+          '<div class="card-actions">' +
+          '<button class="btn btn-sm" data-action="view" data-index="' + displayIdx + '">🔍 详情</button>' +
+          '<button class="btn btn-sm" data-action="share" data-index="' + displayIdx + '">📤 分享</button>' +
+          '<button class="btn btn-sm" data-action="delete" data-index="' + displayIdx + '" style="background:#fee2e2;color:#991b1b;">🗑️ 删除</button>' +
+          '</div></div>'
+      }).join('') +
+      '<button class="btn btn-sm" id="goRecycleBtn" style="display:block;margin:8px auto 0;">🗑️ 查看回收站</button>'
+      document.getElementById('goRecycleBtn').onclick = renderRecycleBin
+    }
+
+    function renderRecycleBin() {
+      const bin = JSON.parse(localStorage.getItem('recycle_bin') || '[]')
+      const body = document.getElementById('modalBody')
+      if (!bin.length) {
+        body.innerHTML = '<p style="color:#98a2b3;text-align:center;padding:24px 0;">回收站是空的</p>' +
+          '<button class="btn btn-sm" id="backToLibraryBtn" style="display:block;margin:0 auto;">📖 返回卡片库</button>'
+        document.getElementById('backToLibraryBtn').onclick = renderLibrary
+        return
+      }
+      body.innerHTML = '<div style="font-size:14px;font-weight:600;color:#6b7280;margin-bottom:12px;">🗑️ 回收站</div>' +
+        '<div class="card-grid">' +
+        bin.slice().reverse().map((n, i) => {
+          const realIdx = bin.length - 1 - i
+          const excerpt = (n.text || '').length > 30 ? n.text.slice(0, 30) + '…' : (n.text || '')
+          return '<div class="library-card recycled">' +
+            '<span class="badge">' + (n.date || '') + '</span>' +
+            '<div class="preview">' + excerpt + '</div>' +
+            '<div class="card-actions">' +
+            '<button class="btn btn-sm" data-recycle="restore" data-idx="' + realIdx + '">🔄 恢复</button>' +
+            '<button class="btn btn-sm" data-recycle="permanent" data-idx="' + realIdx + '" style="background:#fee2e2;color:#991b1b;">🔥 彻底删除</button>' +
+            '</div></div>'
+        }).join('') + '</div>' +
+        '<button class="btn btn-sm" id="backToLibraryBtn" style="display:block;margin:12px auto 0;">📖 返回卡片库</button>'
+      document.getElementById('backToLibraryBtn').onclick = renderLibrary
     }
 
     function shareCard(idx) {
       const note = showCard(idx)
       if (!note) return
-      const text = '📖 阅读笔记\n\n📅 ' + (note.date || '') + '\n\n📖 原文：' + (note.text || '') + '\n\n✏️ 我的思考：' + (note.thought || '') + (note.summary ? '\n\n📄 AI 总结：' + note.summary : '')
-      if (navigator.share) {
-        navigator.share({ title: '阅读笔记', text }).catch(() => {})
-      } else {
-        navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板')).catch(() => alert('分享失败'))
-      }
+      window._shareNote = note
+      const html = '<div class="share-card" id="shareCardPreview">' +
+        '<div class="s-header">伴读副驾 · 语料萃取</div>' +
+        '<div class="s-quote">' + (note.text || '') + '</div>' +
+        '<div class="s-body"><strong>我的思考：</strong>' + (note.thought || '') + '</div>' +
+        (note.summary ? '<div class="s-body"><strong>AI 升华：</strong>' + note.summary + '</div>' : '') +
+        '<div class="s-footer">' + (note.date || '') + ' · TCSOL 研究员手记</div>' +
+        '</div>'
+      document.getElementById('shareBody').innerHTML = html
+      document.getElementById('shareModal').classList.add('open')
     }
 
     document.getElementById('btnLibrary').onclick = () => {
@@ -789,32 +905,71 @@
 
     document.getElementById('modalBody').onclick = (e) => {
       const btn = e.target.closest('[data-action]')
-      if (!btn) return
-      const idx = parseInt(btn.dataset.index)
-      const note = showCard(idx)
-      if (!note) return
-
-      if (btn.dataset.action === 'view') {
-        document.getElementById('detailBody').innerHTML =
-          '<div class="detail-section"><div class="label">📅 日期</div><div class="value">' + (note.date || '') + '</div></div>' +
-          '<div class="detail-section"><div class="label">📖 原文</div><div class="value">' + (note.text || '') + '</div></div>' +
-          '<div class="detail-section"><div class="label">✏️ 我的思考</div><div class="value">' + (note.thought || '') + '</div></div>' +
-          (note.summary ? '<div class="detail-section"><div class="label">📄 AI 研讨总结</div><div class="value">' + note.summary + '</div></div>' : '')
-        document.getElementById('detailModal').classList.add('open')
-      } else if (btn.dataset.action === 'share') {
-        shareCard(idx)
-      } else if (btn.dataset.action === 'delete') {
-        if (!confirm('确定删除这条笔记吗？')) return
-        deleteCard(idx)
+      if (btn) {
+        const idx = parseInt(btn.dataset.index)
+        const note = showCard(idx)
+        if (!note) return
+        if (btn.dataset.action === 'view') {
+          document.getElementById('detailBody').innerHTML =
+            '<div class="detail-section"><div class="label">📅 日期</div><div class="value">' + (note.date || '') + '</div></div>' +
+            '<div class="detail-section"><div class="label">📖 原文</div><div class="value">' + (note.text || '') + '</div></div>' +
+            '<div class="detail-section"><div class="label">✏️ 我的思考</div><div class="value">' + (note.thought || '') + '</div></div>' +
+            (note.summary ? '<div class="detail-section"><div class="label">📄 AI 研讨总结</div><div class="value">' + note.summary + '</div></div>' : '')
+          document.getElementById('detailModal').classList.add('open')
+        } else if (btn.dataset.action === 'share') {
+          shareCard(idx)
+        } else if (btn.dataset.action === 'delete') {
+          if (!confirm('确定删除这条笔记吗？删除后可从回收站恢复。')) return
+          deleteCard(idx)
+        }
+        return
+      }
+      const rbtn = e.target.closest('[data-recycle]')
+      if (rbtn) {
+        const idx = parseInt(rbtn.dataset.idx)
+        if (rbtn.dataset.recycle === 'restore') {
+          restoreCard(idx)
+        } else if (rbtn.dataset.recycle === 'permanent') {
+          if (!confirm('确定要永久删除这条笔记吗？此操作不可恢复！')) return
+          if (!confirm('再次确认：这条笔记将被彻底删除。')) return
+          permanentDeleteCard(idx)
+        }
       }
     }
 
-    document.getElementById('detailClose').onclick = () => {
-      document.getElementById('detailModal').classList.remove('open')
+    document.getElementById('shareClose').onclick = () => {
+      document.getElementById('shareModal').classList.remove('open')
+    }
+    document.getElementById('shareModal').onclick = (e) => {
+      if (e.target === e.currentTarget) document.getElementById('shareModal').classList.remove('open')
     }
 
-    document.getElementById('detailModal').onclick = (e) => {
-      if (e.target === e.currentTarget) document.getElementById('detailModal').classList.remove('open')
+    document.getElementById('shareAsImage').onclick = async () => {
+      const node = document.getElementById('shareCardPreview')
+      if (!node || !window.html2canvas) { alert('图片生成库尚未加载，请稍后重试'); return }
+      try {
+        const canvas = await html2canvas(node, { scale: 2, backgroundColor: '#fff' })
+        const link = document.createElement('a')
+        link.download = '阅读卡片_' + new Date().toISOString().slice(0, 10) + '.png'
+        link.href = canvas.toDataURL()
+        link.click()
+      } catch (e) { alert('生成图片失败: ' + e.message) }
+    }
+
+    document.getElementById('shareAsMd').onclick = () => {
+      const n = window._shareNote
+      if (!n) return
+      const md = '# 阅读卡片\n\n📅 ' + (n.date || '') + '\n\n## 原文\n> ' + (n.text || '') + '\n\n## 我的思考\n' + (n.thought || '') + (n.summary ? '\n\n## AI 研讨总结\n' + n.summary : '') + '\n\n---\n*TCSOL 研究员手记 · ' + (n.date || '') + '*'
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = '阅读卡片_' + new Date().toISOString().slice(0, 10) + '.md'; a.click()
+      URL.revokeObjectURL(a.href)
+    }
+
+    document.getElementById('shareAsText').onclick = () => {
+      const n = window._shareNote
+      if (!n) return
+      const text = '📖 阅读笔记\n\n📅 ' + (n.date || '') + '\n\n📖 原文：' + (n.text || '') + '\n\n✏️ 我的思考：' + (n.thought || '') + (n.summary ? '\n\n📄 AI 总结：' + n.summary : '')
+      navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板')).catch(() => alert('复制失败'))
     }
   </script>
 </body>
